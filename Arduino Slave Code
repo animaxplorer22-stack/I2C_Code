@@ -1,0 +1,183 @@
+/*
+  Phone Master - Arduino Slave
+  Your phone sends jobs via Bluetooth, Arduino mines
+  got the idea from eigsnberg!
+*/
+
+#include <avr/wdt.h>
+
+#define LED 13
+
+char lastHash[41];
+char targetHash[41];
+uint8_t targetBytes[20];
+int difficulty = 10;
+bool hasJob = false;
+unsigned long totalHashes = 0;
+unsigned long accepted = 0;
+
+uint32_t maxNonce = 0;
+uint32_t foundNonce = 0;
+
+const uint32_t sha1_k[4] = { 0x5A827999, 0x6ED9EBA1, 0x8F1BBCDC, 0xCA62C1D6 };
+#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+
+void sha1_transform(uint32_t *state, const uint8_t *data) {
+  uint32_t w[80], a, b, c, d, e, temp;
+  for (int i = 0; i < 16; i++) 
+    w[i] = (data[i*4]<<24)|(data[i*4+1]<<16)|(data[i*4+2]<<8)|data[i*4+3];
+  for (int i = 16; i < 80; i++) 
+    w[i] = ROTLEFT(w[i-3] ^ w[i-8] ^ w[i-14] ^ w[i-16], 1);
+  a = state[0]; b = state[1]; c = state[2]; d = state[3]; e = state[4];
+  for (int i = 0; i < 20; i++) {
+    temp = ROTLEFT(a,5) + ((b&c)|(~b&d)) + e + w[i] + sha1_k[0];
+    e = d; d = c; c = ROTLEFT(b,30); b = a; a = temp;
+  }
+  for (int i = 20; i < 40; i++) {
+    temp = ROTLEFT(a,5) + (b^c^d) + e + w[i] + sha1_k[1];
+    e = d; d = c; c = ROTLEFT(b,30); b = a; a = temp;
+  }
+  for (int i = 40; i < 60; i++) {
+    temp = ROTLEFT(a,5) + ((b&c)|(b&d)|(c&d)) + e + w[i] + sha1_k[2];
+    e = d; d = c; c = ROTLEFT(b,30); b = a; a = temp;
+  }
+  for (int i = 60; i < 80; i++) {
+    temp = ROTLEFT(a,5) + (b^c^d) + e + w[i] + sha1_k[3];
+    e = d; d = c; c = ROTLEFT(b,30); b = a; a = temp;
+  }
+  state[0] += a; state[1] += b; state[2] += c; state[3] += d; state[4] += e;
+}
+
+void hashString(const char* input, uint8_t* output) {
+  uint32_t state[5] = {0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0};
+  uint8_t block[64];
+  int len = strlen(input);
+  memcpy(block, input, len);
+  block[len] = 0x80;
+  memset(block + len + 1, 0, 55 - len);
+  *(uint64_t*)(block + 56) = len * 8;
+  sha1_transform(state, block);
+  for (int i = 0; i < 4; i++) {
+    output[i] = state[0] >> (24 - i*8);
+    output[i+4] = state[1] >> (24 - i*8);
+    output[i+8] = state[2] >> (24 - i*8);
+    output[i+12] = state[3] >> (24 - i*8);
+    output[i+16] = state[4] >> (24 - i*8);
+  }
+}
+
+uint8_t hexNibble(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  return c - 'A' + 10;
+}
+
+void hexToBytes(const char* hex, uint8_t* bytes, int len) {
+  for (int i = 0; i < len; i++)
+    bytes[i] = (hexNibble(hex[i*2]) << 4) | hexNibble(hex[i*2+1]);
+}
+
+void intToStr(uint32_t n, char* out) {
+  if (n == 0) { out[0] = '0'; out[1] = '\0'; return; }
+  char t[12]; int i = 0;
+  while (n) { t[i++] = '0' + (n % 10); n /= 10; }
+  for (int j = 0; j < i; j++) out[j] = t[i-1-j];
+  out[i] = '\0';
+}
+
+void mine() {
+  if (!hasJob) return;
+  
+  char input[52], nonceStr[12];
+  uint8_t result[20];
+  int hashLen = strlen(lastHash);
+  strcpy(input, lastHash);
+  
+  for (uint32_t n = 0; n < maxNonce; n++) {
+    intToStr(n, nonceStr);
+    strcpy(input + hashLen, nonceStr);
+    hashString(input, result);
+    totalHashes++;
+    
+    if (memcmp(result, targetBytes, 20) == 0) {
+      foundNonce = n;
+      hasJob = false;
+      Serial.print("FOUND,");
+      Serial.println(n);
+      digitalWrite(LED, HIGH);
+      delay(100);
+      digitalWrite(LED, LOW);
+      accepted++;
+      return;
+    }
+    if ((n & 0xFF) == 0) wdt_reset();
+  }
+  Serial.println("NONCE_NOT_FOUND");
+  hasJob = false;
+}
+
+void processCommand(char* cmd) {
+  if (strncmp(cmd, "JOB,", 4) == 0) {
+    char* p = cmd + 4;
+    char* comma = strchr(p, ',');
+    if (!comma) return;
+    int len = comma - p;
+    if (len > 40) len = 40;
+    memcpy(lastHash, p, len);
+    lastHash[len] = '\0';
+    
+    p = comma + 1;
+    comma = strchr(p, ',');
+    if (!comma) return;
+    len = comma - p;
+    if (len > 40) len = 40;
+    memcpy(targetHash, p, len);
+    targetHash[len] = '\0';
+    
+    p = comma + 1;
+    difficulty = atoi(p);
+    if (difficulty < 1) difficulty = 10;
+    
+    hexToBytes(targetHash, targetBytes, 20);
+    maxNonce = difficulty * 100;
+    if (maxNonce < 1000) maxNonce = 1000;
+    hasJob = true;
+    Serial.println("JOB_READY");
+  }
+  else if (strcmp(cmd, "PING") == 0) {
+    Serial.println("PONG");
+  }
+}
+
+char buf[64];
+int idx = 0;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(LED, OUTPUT);
+  wdt_enable(WDTO_2S);
+  Serial.println("READY");
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(LED, HIGH);
+    delay(100);
+    digitalWrite(LED, LOW);
+    delay(100);
+  }
+}
+
+void loop() {
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == '\n') {
+      buf[idx] = '\0';
+      if (idx > 0) processCommand(buf);
+      idx = 0;
+    } else if (idx < 63) {
+      buf[idx++] = c;
+    }
+  }
+  
+  if (hasJob) mine();
+  wdt_reset();
+  delay(1);
+}
