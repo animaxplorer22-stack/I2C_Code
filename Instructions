@@ -1,0 +1,102 @@
+ HOW TO MAKE YOUR PHONE THE MASTER (No computer needed)     
+╚═════════════════════════════════════════════════════════════
+
+📦 WHAT YOU NEED:
+────────────────
+• Arduino Uno/Nano + HC-05 Bluetooth module
+• Your phone (Android or iPhone)
+• USB cable (just for first-time code upload)
+
+🔌 STEP 1: WIRE IT
+────────────────
+HC-05    →    Arduino
+TX       →    RX (pin 0)
+RX       →    TX (pin 1)
+VCC      →    5V
+GND      →    GND
+
+⚠️ Unplug RX/TX when uploading code. Plug back after.
+
+📲 STEP 2: UPLOAD CODE TO ARDUINO
+─────────────────────────────────
+1. Open Arduino IDE on a computer (just once)
+2. Paste the code from this chat
+3. Disconnect RX/TX wires
+4. Click Upload
+5. Reconnect RX/TX wires
+
+🎯 STEP 3: PAIR YOUR PHONE
+─────────────────────────
+1. Turn on Bluetooth
+2. Scan for devices
+3. Find "HC-05"
+4. PIN: 1234 or 0000
+
+📱 STEP 4: DOWNLOAD APP
+───────────────────────
+Search "Serial Bluetooth Terminal" in your app store.
+Download it. It's free.
+
+🔗 STEP 5: CONNECT
+─────────────────
+1. Open the app
+2. Tap connect (📎 or 🔌 icon)
+3. Select "HC-05"
+
+✅ STEP 6: TEST IT
+─────────────────
+Type: PING
+Send it.
+
+You should see: PONG
+
+If you see garbage text, change baud rate to 9600 in app settings.
+
+⛏️ STEP 7: GET A JOB
+────────────────────
+You need three things from DUCO server:
+• last_hash (40 chars)
+• target_hash (40 chars)  
+• difficulty (number)
+
+Get these from DUCO web dashboard or by running a script on a PC.
+
+📤 STEP 8: SEND JOB TO ARDUINO
+─────────────────────────────
+Type this format:
+
+JOB,last_hash,target_hash,difficulty
+
+Example:
+JOB,ffe0e47b591d542be3e9d8aeaeedebcbaa602095,0000a3f2b1c4e5d6a7b8c9d0e1f2a3b4c5d6e7f8,45
+
+Hit send. Arduino replies: JOB_READY
+
+⏳ STEP 9: WAIT
+──────────────
+Arduino mines for 10-60 seconds.
+You'll see: FOUND,12345
+
+🎉 STEP 10: SUBMIT
+─────────────────
+Go to DUCO website → Manual share submission.
+Enter your username and the nonce (12345).
+If it says GOOD, you just mined!
+
+🔄 STEP 11: REPEAT
+─────────────────
+Get another job. Send it. Wait. Submit.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ QUICK FIXES
+
+No PONG?              → Check wiring, reconnect Bluetooth
+Garbage text?         → Set baud rate to 9600
+Upload fails?         → Disconnect RX/TX first
+Job not found?        → Wrong format, check commas
+No response?          → Reset Arduino (press reset button)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💬 That's it. Your phone is now the master. Happy mining!
